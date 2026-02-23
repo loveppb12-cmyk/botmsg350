@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-DELETE_DELAY = 210 # 210 seconds
+DELETE_DELAY = 10 # 210 seconds
 
 class TelegramMessageDeleter:
     def __init__(self):
@@ -49,16 +49,18 @@ class TelegramMessageDeleter:
                     
                     # Don't delete messages from our own bot
                     if self.bot_info and event.sender.id == self.bot_info.id:
+                        logger.info(f"🤖 Bot's own message detected - keeping it safe")
                         return
                     
-                    # Check if message is from a bot OR a regular user
+                    # Delete messages from BOTH bots AND regular users
+                    # This will delete all messages except our own bot's messages
                     sender_type = "🤖 Bot" if event.sender.bot else "👤 User"
                     
                     logger.info(f"{sender_type} message detected from {event.sender.first_name} (ID: {event.sender.id})")
                     logger.info(f"📝 Message: {event.text[:100] if event.text else 'Media message'}")
                     logger.info(f"⏰ Will delete in {DELETE_DELAY} seconds...")
                     
-                    # Wait 10 seconds then delete
+                    # Wait then delete
                     await asyncio.sleep(DELETE_DELAY)
                     
                     try:
