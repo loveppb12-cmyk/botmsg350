@@ -3,7 +3,7 @@ import os
 # Bot Configuration
 API_ID = 20284828
 API_HASH = "a980ba25306901d5c9b899414d6a9ab7"
-BOT_TOKEN = "08xi40kdco"
+BOT_TOKEN = "8396543716:AAEhyP5fchUdqGguHQ6GSY9u1tkN_Kz-YhE"
 SESSION_STRING = "1mRNEGc_a0iRIxnbmdJTdWCpm4YcwyPTmkTgBznrSU-b8S-DHLuWSm4cXncNpe_KVzoDP0tx63LpdtXfUlGXZBukZCRtIKUNNshlGv6g5vntkjC70RBXFlx7wes4XaQECn4CNwPXVdH86S4Hr3qCXMrb05TiCANJH2zwXqDrAz6nXzypii0ENUXAPVKFfeqwy7usahkm07_EMqZI0Aen0qs53_URFnT-xjDwwMtQqMfDAjg8YgNnMybrckTbQMOrOUbS_AR1pdWPuSyaIjLHzcTG2xAqUSkHX4ktLbWcqWM="
 
 # Deletion delay in seconds
