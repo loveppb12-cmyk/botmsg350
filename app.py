@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-DELETE_DELAY = 10 # 210 seconds
+DELETE_DELAY = 10  # seconds
 
 class TelegramMessageDeleter:
     def __init__(self):
@@ -33,30 +33,41 @@ class TelegramMessageDeleter:
             self.user_client = TelegramClient(
                 session=session,
                 api_id=API_ID,
-                api_hash=API_HASH
+                api_hash=API_HASH,
+                connection_retries=5,
+                retry_delay=3
             )
             
             await self.user_client.start()
             user_me = await self.user_client.get_me()
-            logger.info(f"✅ User client started successfully: {user_me.first_name}")
+            logger.info(f"✅ User client started successfully: {user_me.first_name} (ID: {user_me.id})")
             
-            @self.user_client.on(events.NewMessage())
+            @self.user_client.on(events.NewMessage)
             async def handler(event):
                 try:
-                    # Ignore if no sender or not a group message
-                    if not event.sender or not event.is_group:
+                    # Log all messages for debugging
+                    logger.info(f"📨 Received message - Chat: {event.chat_id}, IsGroup: {event.is_group}, Sender: {event.sender_id}")
+                    
+                    # Check if it's a group message
+                    if not event.is_group:
+                        logger.info(f"⏭️ Skipping non-group message")
+                        return
+                    
+                    # Get sender info
+                    sender = await event.get_sender()
+                    if not sender:
+                        logger.info(f"⏭️ Could not get sender info")
                         return
                     
                     # Don't delete messages from our own bot
-                    if self.bot_info and event.sender.id == self.bot_info.id:
+                    if self.bot_info and sender.id == self.bot_info.id:
                         logger.info(f"🤖 Bot's own message detected - keeping it safe")
                         return
                     
-                    # Delete messages from BOTH bots AND regular users
-                    # This will delete all messages except our own bot's messages
-                    sender_type = "🤖 Bot" if event.sender.bot else "👤 User"
+                    # Delete all other messages (both bots and regular users)
+                    sender_type = "🤖 Bot" if getattr(sender, 'bot', False) else "👤 User"
                     
-                    logger.info(f"{sender_type} message detected from {event.sender.first_name} (ID: {event.sender.id})")
+                    logger.info(f"{sender_type} message detected from {sender.first_name} (ID: {sender.id})")
                     logger.info(f"📝 Message: {event.text[:100] if event.text else 'Media message'}")
                     logger.info(f"⏰ Will delete in {DELETE_DELAY} seconds...")
                     
@@ -65,12 +76,14 @@ class TelegramMessageDeleter:
                     
                     try:
                         await event.delete()
-                        logger.info(f"✅ Successfully deleted {sender_type.lower()} message from {event.sender.first_name} after {DELETE_DELAY} seconds")
+                        logger.info(f"✅ Successfully deleted {sender_type.lower()} message from {sender.first_name} after {DELETE_DELAY} seconds")
                     except Exception as delete_error:
                         logger.error(f"❌ Failed to delete message: {delete_error}")
                             
                 except Exception as e:
                     logger.error(f"Error in message handler: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
 
             return True
             
@@ -87,12 +100,14 @@ class TelegramMessageDeleter:
             self.bot_client = TelegramClient(
                 session='bot_session',
                 api_id=API_ID, 
-                api_hash=API_HASH
+                api_hash=API_HASH,
+                connection_retries=5,
+                retry_delay=3
             )
             
             await self.bot_client.start(bot_token=BOT_TOKEN)
             self.bot_info = await self.bot_client.get_me()
-            logger.info(f"✅ Bot client started: {self.bot_info.first_name} (@{self.bot_info.username})")
+            logger.info(f"✅ Bot client started: {self.bot_info.first_name} (@{self.bot_info.username}, ID: {self.bot_info.id})")
             
             # Add start command handler with creator credit
             @self.bot_client.on(events.NewMessage(pattern='/start'))
@@ -128,22 +143,27 @@ class TelegramMessageDeleter:
                 await event.reply(help_text, link_preview=False)
             
             # Also send creator info when bot is added to group
-            @self.bot_client.on(events.ChatAction())
+            @self.bot_client.on(events.ChatAction)
             async def chat_action_handler(event):
-                if event.user_added and await event.get_user() == self.bot_info:
-                    creator_text = "🤖 **Thanks for adding me!**\n\n"
-                    creator_text += "This Bot is created by [@uexnc](https://t.me/uexnc)\n\n"
-                    creator_text += "I will automatically delete **ALL messages** (both bots and users) "
-                    creator_text += f"**{DELETE_DELAY} seconds** after they are sent.\n\n"
-                    creator_text += "**Only my messages are safe from deletion!**\n\n"
-                    creator_text += "**Make sure to:**\n"
-                    creator_text += "1. Promote me as admin\n"
-                    creator_text += "2. Give me 'Delete Messages' permission\n"
-                    creator_text += "3. Also promote the user account as admin\n\n"
-                    creator_text += "Use /start to check my status\n"
-                    creator_text += "Use /help for more information"
-                    
-                    await event.reply(creator_text, link_preview=False)
+                try:
+                    if event.user_added:
+                        users = await event.get_users()
+                        if self.bot_info.id in [u.id for u in users]:
+                            creator_text = "🤖 **Thanks for adding me!**\n\n"
+                            creator_text += "This Bot is created by [@uexnc](https://t.me/uexnc)\n\n"
+                            creator_text += "I will automatically delete **ALL messages** (both bots and users) "
+                            creator_text += f"**{DELETE_DELAY} seconds** after they are sent.\n\n"
+                            creator_text += "**Only my messages are safe from deletion!**\n\n"
+                            creator_text += "**Make sure to:**\n"
+                            creator_text += "1. Promote me as admin\n"
+                            creator_text += "2. Give me 'Delete Messages' permission\n"
+                            creator_text += "3. Also promote the user account as admin\n\n"
+                            creator_text += "Use /start to check my status\n"
+                            creator_text += "Use /help for more information"
+                            
+                            await event.reply(creator_text, link_preview=False)
+                except Exception as e:
+                    logger.error(f"Error in chat action handler: {e}")
 
             return True
             
@@ -160,9 +180,14 @@ class TelegramMessageDeleter:
                 user_me = await self.user_client.get_me()
                 bot_me = await self.bot_client.get_me()
                 
-                logger.info(f"🔗 User account: {user_me.first_name} (@{user_me.username})")
-                logger.info(f"🔗 Bot account: {bot_me.first_name} (@{bot_me.username})")
+                logger.info(f"🔗 User account: {user_me.first_name} (@{user_me.username}, ID: {user_me.id})")
+                logger.info(f"🔗 Bot account: {bot_me.first_name} (@{bot_me.username}, ID: {bot_me.id})")
                 logger.info("✅ Both clients are connected and ready!")
+                
+                # Test if user client can get dialogs
+                dialogs = await self.user_client.get_dialogs(limit=5)
+                logger.info(f"📱 User client sees {len(dialogs)} recent dialogs")
+                
                 return True
         except Exception as e:
             logger.error(f"❌ Connection check failed: {e}")
@@ -189,6 +214,10 @@ class TelegramMessageDeleter:
                 logger.info(f"⏰ All messages will be deleted after {DELETE_DELAY} seconds")
                 logger.info("🛡️ Only bot's own messages are protected from deletion")
                 logger.info("👨‍💻 Created by @itz_fizzyll")
+                logger.info("💡 Make sure:")
+                logger.info("   - User account is admin in the group")
+                logger.info("   - Bot is admin in the group")
+                logger.info("   - Both have 'Delete Messages' permission")
                 
                 # Keep both clients running
                 await asyncio.gather(
@@ -220,7 +249,6 @@ async def main():
     await deleter.run()
 
 if __name__ == "__main__":
-    # For Heroku - simple execution
     logger.info("🚀 Starting Auto Message Deleter...")
     logger.info(f"⏰ Deletion delay set to: {DELETE_DELAY} seconds")
     logger.info("🎯 Target: ALL messages (both bots and users)")
@@ -228,7 +256,6 @@ if __name__ == "__main__":
     logger.info("👨‍💻 Created by @itz_fizzyll")
     
     try:
-        # Run the bot
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("⏹️ Bot stopped by user")
